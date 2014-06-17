@@ -1,0 +1,22 @@
+{
+  "name": "judaicalink-crawler",
+  "version": "0.0.1",
+  "description": "Crawler and RDF converter implementations for JudaicaLink",
+  "author": "Kai Eckert",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kaiec/judaicalink-crawler"
+  },
+  "bugs": {
+    "url": "https://github.com/kaiec/judaicalink-crawler/issues"
+  },
+  "dependencies": {
+    "crawler": "*",
+    "n3": "*"
+  },
+  "devDependencies": {
+  },
+  "preferGlobal": false,
+  "private": true,
+  "license": "MIT"
+}

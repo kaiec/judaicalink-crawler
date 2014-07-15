@@ -1,101 +1,135 @@
 Crawler = require("crawler").Crawler
 fs = require('fs');
 
+
+visited = {} # Map of visited URLs (Needed as we have two URLs per page, ?id= and /title)
+counter = 0
+queued = 0
+queue = []
+records = []
+crawling = false
+
+
 lowerCase = (url) ->
 	encodeURI(decodeURI(url).toLowerCase())
 
 # Helper function that only queues a URL if we haven't visited it yet.
 checkForQueue = (url) ->
-	if visited[url]==undefined
+	if visited[url]==undefined and queue.indexOf(url)<0
 		# console.log("Queued: " + url + " Encoded: " + encodeURI(url))
-		c.queue(url)
+		queue.push(url)
 		queued++
-		return 
+		processQueue()
+		return
 
-c = new Crawler {
-	"maxConnections": 50,
-	"skipDuplicates": true,
-	# When finished, close the array in the output file
-	"onDrain": ->
-		fs.appendFile("output.json", "]\n")
-		console.log("Finished: " + new Date())
-	#This will be called for each crawled page
-	"callback": (error,result,$) ->
-		# $ is a jQuery instance scoped to the server-side DOM of the page
-		queued--
-		record = {}
-		try
-			if (error!=null)
-				console.log "#{new Date()}: #{error.message}"
-				return
+processQueue = ->
+	return if (queue.length==0)
+	if (!crawling)
+		c = createCrawler(processRujenPage, ->
+				crawling=false
+				console.log("Crawler finished. (Queue: #{queue.length})")
+				if (queue.length==0)
+					finish()
+				else 
+					setTimeout(processQueue, 500)
+			)
+		toProcess = queue.splice(0,100)
+		for q in toProcess
+			c.queue(q)
+		crawling = true
+		console.log("New crawler started with queue size #{toProcess.length} (Queue: #{queue.length})")
+	return 
 
-			# check for index pages
-			if (result.req.path.indexOf("AllPages")!=-1)
-				# Links
-				$("td a").each (index,a) ->
-					page = "http://rujen.ru#{$(a).attr("href")}"
-					page = lowerCase(page)
-					checkForQueue page
-				$("#bodyContent p a:last").each (index,a) ->
-					checkForQueue "http://rujen.ru#{$(a).attr("href")}"
-				return
+createCrawler = (processPage, onDrain) ->
+	new Crawler {
+		"maxConnections": 50,
+		"skipDuplicates": true,
+		"onDrain": onDrain,
+		"callback": processPage,
+		"timeout": 5000
+		}
 
-			# Identifiers (in this case URI and numerical ID)
-			record.uri = lowerCase "http://rujen.ru#{result.req.path}"
-			try
-				record.id = /var wgArticleId = "?([0-9]+)"?;/g.exec($("head").html())[1]
-			catch error
-				console.log("Error (#{record.uri}): #{error.message}")
-				fs.appendFile("error.txt", "#{new Date()} Error (#{record.uri}): #{error.message}\n")
-				return
 
-			# Mark as visited
-			visited[record.uri]=""
-			
+# When finished, close the array in the output file
+finish = ->
+	fs.appendFile("output.json", "]\n")
+	console.log("Finished: " + new Date())
 
-			# Basic stuff
-			record.title = $("h1.firstHeading").text()
-			
-			# Not yet written
-			if record.id=="0"
-				record.empty="true"
-				records.push record
-				fs.appendFile("output.json", (if counter++>0 then ",\n" else "") + JSON.stringify(record,null,1))
-				console.log("#{counter}. Processed #{record.uri} (id=#{record.id})")
-				return
-			if record.id=="1"
-				return
+processRujenPage = (error,result,$) ->
+	# $ is a jQuery instance scoped to the server-side DOM of the page
+	queued--
+	record = {}
+	try
+		if (error!=null)
+			console.log "#{new Date()}: #{error.message}"
+			return
 
-			record.abstract = $("#bodyContent>p:first").text().replace("\\n","").trim()
-
+		# check for index pages
+		if (result.req.path.indexOf("AllPages")!=-1)
 			# Links
-			record.links = []
-			$("#bodyContent>p>a").each (index,a) ->
-				link = {}
-				h = "http://rujen.ru#{$(a).attr("href").replace("&action=edit&redlink=1","").replace("?title=","/")}"
-				link.href = lowerCase(h)
-				link.text = $(a).text().trim()
-				record.links.push link if link.text.length>0 # Strangely, there are sometimes empty links
-				checkForQueue link.href
+			$("td a").each (index,a) ->
+				page = "http://rujen.ru#{$(a).attr("href")}"
+				page = lowerCase(page)
+				checkForQueue lowerCase page
+			$("#bodyContent p a:last").each (index,a) ->
+				checkForQueue lowerCase "http://rujen.ru#{$(a).attr("href")}"
+			return
 
-			#Category
-			record.categories = []
-			$("#catlinks span a").each (index,a) ->
-				record.categories.push($(a).text().trim())
+		# Identifiers (in this case URI and numerical ID)
+		record.uri = lowerCase "http://rujen.ru#{result.req.path}"
+		try
+			record.id = /var wgArticleId = "?([0-9]+)"?;/g.exec($("head").html())[1]
+		catch error
+			console.log("Error (#{record.uri}): #{error.message}")
+			fs.appendFile("error.txt", "#{new Date()} Error (#{record.uri}): #{error.message}\n")
+			return
 
-			# Store the result
+		# Have we been there in the meantime?
+		if visited[record.uri]=""
+			return
+
+		# Mark as visited
+		visited[record.uri]=""
+		
+
+		# Basic stuff
+		record.title = $("h1.firstHeading").text()
+		
+		# Not yet written
+		if record.id=="0"
+			record.empty="true"
 			records.push record
 			fs.appendFile("output.json", (if counter++>0 then ",\n" else "") + JSON.stringify(record,null,1))
 			console.log("#{counter}. Processed #{record.uri} (id=#{record.id})")
-		catch error
-			fs.appendFile("error.txt", "#{new Date()} Error (#{record.uri}): #{error.message}\n")
-	}
+			return
+		if record.id=="1"
+			return
+
+		record.abstract = $("#bodyContent>p:first").text().replace("\\n","").trim()
+
+		# Links
+		record.links = []
+		$("#bodyContent>p>a").each (index,a) ->
+			link = {}
+			h = "http://rujen.ru#{$(a).attr("href").replace("&action=edit&redlink=1","").replace("?title=","/")}"
+			link.href = lowerCase(h)
+			link.text = $(a).text().trim()
+			record.links.push link if link.text.length>0 # Strangely, there are sometimes empty links
+			checkForQueue link.href
+
+		#Category
+		record.categories = []
+		$("#catlinks span a").each (index,a) ->
+			record.categories.push($(a).text().trim())
+
+		# Store the result
+		records.push record
+		fs.appendFile("output.json", (if counter++>0 then ",\n" else "") + JSON.stringify(record,null,1))
+		console.log("#{counter}. Processed #{record.uri} (id=#{record.id})")
+	catch error
+		fs.appendFile("error.txt", "#{new Date()} Error (#{record.uri}): #{error.message}\n")
 
 
-visited = {} # Map of visited URLs (Needed as we have two URLs per page, ?id= and /title)
-counter = 0
-queued = 0
-records = []
 
 # Load previous results, if not yet finished
 try

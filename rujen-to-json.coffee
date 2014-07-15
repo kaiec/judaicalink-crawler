@@ -13,7 +13,7 @@ checkForQueue = (url) ->
 		return 
 
 c = new Crawler {
-	"maxConnections": 5,
+	"maxConnections": 50,
 	"skipDuplicates": true,
 	# When finished, close the array in the output file
 	"onDrain": ->
@@ -62,6 +62,8 @@ c = new Crawler {
 				records.push record
 				fs.appendFile("output.json", (if counter++>0 then ",\n" else "") + JSON.stringify(record,null,1))
 				console.log("#{counter}. Processed #{record.uri} (id=#{record.id})")
+				return
+			if record.id=="1"
 				return
 
 			record.abstract = $("#bodyContent>p:first").text().replace("\\n","").trim()
@@ -114,8 +116,9 @@ for r in records
 
 # Queue all link from pages that we already visited
 for r in records
-	for l in r.links?
-		checkForQueue l.href
+	if r.links
+		for l in r.links
+			checkForQueue l.href
 
 console.log("Queued URLs: " + queued)
 console.log("Records loaded: #{records.length}")

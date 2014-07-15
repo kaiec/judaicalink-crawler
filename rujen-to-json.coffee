@@ -1,4 +1,5 @@
-Crawler = require("crawler").Crawler
+http = require('http')
+cheerio = require('cheerio')
 fs = require('fs');
 
 
@@ -7,8 +8,9 @@ counter = 0
 queued = 0
 queue = []
 records = []
-crawling = false
 
+maxSockets = 100
+http.globalAgent.maxSockets = maxSockets
 
 lowerCase = (url) ->
 	encodeURI(decodeURI(url).toLowerCase())
@@ -18,36 +20,62 @@ checkForQueue = (url) ->
 	if visited[url]==undefined and queue.indexOf(url)<0
 		# console.log("Queued: " + url + " Encoded: " + encodeURI(url))
 		queue.push(url)
+		console.log("Queued: " + url)
 		queued++
 		processQueue()
 		return
 
-processQueue = ->
-	return if (queue.length==0)
-	if (!crawling)
-		c = createCrawler(processRujenPage, ->
-				crawling=false
-				console.log("Crawler finished. (Queue: #{queue.length})")
-				if (queue.length==0)
-					finish()
-				else 
-					setTimeout(processQueue, 500)
-			)
-		toProcess = queue.splice(0,100)
-		for q in toProcess
-			c.queue(q)
-		crawling = true
-		console.log("New crawler started with queue size #{toProcess.length} (Queue: #{queue.length})")
-	return 
+running = 0
+request = (url, callback, redirect) ->
+	# console.log "request #{url}, redirect: #{redirect}"
+	if redirect==undefined
+		running++
+		redirect = url
+	req = http.get redirect, (res) ->
+		# console.log "Resonse: #{res.statusCode}"
+		if res.statusCode>=300 and res.statusCode < 307
+			request(url, callback, res.headers["location"])
+			res.on "data", ->
+			return
+		if res.statusCode!=200
+			e = new Error("Server Error: #{res.statusCode}, URL: #{url}, Requested: #{redirect}")
+			e.url = url
+			callback(e)
+			res.on "data", ->
+			requestComplete()
+			return
+		html = ""
+		res.on "data", (chunk) ->
+			# console.log "Chunk"
+			html += chunk
+		res.on "end", ->
+			# console.log "No more data"
+			# console.log "Preparing response: html=#{html}, res.data=#{res.data}" 
+			res.data = html if (res.data==undefined)
+			# console.log "Preparing response: url=#{url}, res.url=#{res.url}" 
+			res.url = url
+			callback(null, res, cheerio.load(html))
+			requestComplete()
+	req.on "error", (e) ->
+		e.url = url
+		callback(e)
+		requestComplete()
 
-createCrawler = (processPage, onDrain) ->
-	new Crawler {
-		"maxConnections": 50,
-		"skipDuplicates": true,
-		"onDrain": onDrain,
-		"callback": processPage,
-		"timeout": 5000
-		}
+requestComplete = ->
+	running--
+	if (running==0) then processQueue()
+
+processQueue = ->
+	if (queue.length==0 and running==0)
+		finish()
+		return
+
+	if (running==0)
+		toProcess = queue.splice(0,maxSockets)
+		for q in toProcess
+			request(q,processRujenPage)
+		# console.log("New crawling started with queue size #{toProcess.length} (Queue: #{queue.length})")
+	return 
 
 
 # When finished, close the array in the output file
@@ -57,31 +85,35 @@ finish = ->
 
 processRujenPage = (error,result,$) ->
 	# $ is a jQuery instance scoped to the server-side DOM of the page
+	# console.log "Processing #{result.url}"
 	queued--
 	record = {}
 	try
 		if (error!=null)
 			console.log "#{new Date()}: #{error.message}"
+			checkForQueue error.url
 			return
 
 		# check for index pages
-		if (result.req.path.indexOf("AllPages")!=-1)
+		if (result.url.indexOf("AllPages")!=-1)
 			# Links
+			console.log("Processing Index Page: " + result.url)
 			$("td a").each (index,a) ->
 				page = "http://rujen.ru#{$(a).attr("href")}"
 				page = lowerCase(page)
 				checkForQueue lowerCase page
-			$("#bodyContent p a:last").each (index,a) ->
-				checkForQueue lowerCase "http://rujen.ru#{$(a).attr("href")}"
+			$("#bodyContent p a").last().each (index,a) ->
+				console.log("Next index page: " + "http://rujen.ru#{$(a).attr("href")}")
+				checkForQueue "http://rujen.ru#{$(a).attr("href")}"
 			return
 
 		# Identifiers (in this case URI and numerical ID)
-		record.uri = lowerCase "http://rujen.ru#{result.req.path}"
-		try
+		record.uri = lowerCase result.url
+		try            # var wgArticleId = "13645";
 			record.id = /var wgArticleId = "?([0-9]+)"?;/g.exec($("head").html())[1]
 		catch error
-			console.log("Error (#{record.uri}): #{error.message}")
-			fs.appendFile("error.txt", "#{new Date()} Error (#{record.uri}): #{error.message}\n")
+			console.log("Error getting ID (#{record.uri}): #{error.message}")
+			fs.appendFile("error.txt", "#{new Date()} Error getting ID (#{record.uri}): #{error.message}\n")
 			return
 
 		# Have we been there in the meantime?
@@ -100,12 +132,12 @@ processRujenPage = (error,result,$) ->
 			record.empty="true"
 			records.push record
 			fs.appendFile("output.json", (if counter++>0 then ",\n" else "") + JSON.stringify(record,null,1))
-			console.log("#{counter}. Processed #{record.uri} (id=#{record.id})")
+			console.log("#{counter}. Processed #{record.uri} (id=#{record.id}) (R/Q/Q=#{running}/#{queued}/#{queue.length})")
 			return
 		if record.id=="1"
 			return
 
-		record.abstract = $("#bodyContent>p:first").text().replace("\\n","").trim()
+		record.abstract = $("#bodyContent>p").text().replace("\\n","").trim()
 
 		# Links
 		record.links = []
@@ -125,7 +157,7 @@ processRujenPage = (error,result,$) ->
 		# Store the result
 		records.push record
 		fs.appendFile("output.json", (if counter++>0 then ",\n" else "") + JSON.stringify(record,null,1))
-		console.log("#{counter}. Processed #{record.uri} (id=#{record.id})")
+		console.log("#{counter}. Processed #{record.uri} (id=#{record.id}) (R/Q/Q=#{running}/#{queued}/#{queue.length})")
 	catch error
 		fs.appendFile("error.txt", "#{new Date()} Error (#{record.uri}): #{error.message}\n")
 

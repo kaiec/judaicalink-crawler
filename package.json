@@ -11,7 +11,7 @@
     "url": "https://github.com/kaiec/judaicalink-crawler/issues"
   },
   "dependencies": {
-    "crawler": "*",
+    "cheerio": "*",
     "n3": "*"
   },
   "devDependencies": {

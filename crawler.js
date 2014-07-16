@@ -9,15 +9,21 @@
   fs = require('fs');
 
   Crawler = (function() {
-    function Crawler(processPage) {
+    function Crawler(processPage, markVisited) {
       this.processPage = processPage;
+      this.markVisited = markVisited;
       this.visited = {};
       this.counter = 0;
       this.queued = 0;
       this.queue = [];
       this.records = [];
       this.running = 0;
-      this.maxSockets = 100;
+      if (this.markVisited === void 0) {
+        this.markVisited = function(visited, record) {
+          return visited[record.uri] = "";
+        };
+      }
+      this.maxSockets = 5;
       http.globalAgent.maxSockets = this.maxSockets;
     }
 
@@ -43,7 +49,7 @@
       _ref = this.records;
       for (_i = 0, _len = _ref.length; _i < _len; _i++) {
         r = _ref[_i];
-        this.visited[r.uri] = "";
+        this.markVisited(this.visited, r);
       }
       _ref1 = this.records;
       for (_j = 0, _len1 = _ref1.length; _j < _len1; _j++) {
@@ -58,6 +64,7 @@
       }
       console.log("Queued URLs: " + this.queued);
       console.log("Records loaded: " + this.records.length);
+      console.log("Visited: " + (Object.keys(this.visited).length));
       if (this.counter === 0) {
         fs.writeFile("output.json", "[\n");
       }
@@ -68,7 +75,7 @@
     Crawler.prototype.checkForQueue = function(url) {
       if (this.visited[url] === void 0 && this.queue.indexOf(url) < 0) {
         this.queue.push(url);
-        console.log("Queued: " + url);
+        console.log("Queued: " + url + " (Queue size: " + this.queue.length + ")");
         this.queued++;
         this.processQueue();
       }
@@ -112,7 +119,7 @@
             if (record !== null) {
               _this.records.push(record);
               fs.appendFile("output.json", (_this.counter++ > 0 ? ",\n" : "") + JSON.stringify(record, null, 1));
-              _this.visited[record.uri] = "";
+              _this.markVisited(_this.visited, record);
               console.log("" + _this.counter + ". Processed " + record.uri + " (id=" + record.id + ") (R/Q/Q=" + _this.running + "/" + _this.queued + "/" + _this.queue.length + ")");
             }
             return _this.requestComplete();

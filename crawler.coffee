@@ -5,15 +5,18 @@ fs = require('fs');
 
 class Crawler
 	
-	constructor: (@processPage) ->
+	constructor: (@processPage, @markVisited) ->
 		@visited = {} # Map of visited URLs (Needed as we have two URLs per page, ?id= and /title)
 		@counter = 0
 		@queued = 0
 		@queue = []
 		@records = []
 		@running = 0
+		if (@markVisited==undefined)
+			@markVisited = (visited, record) ->
+				visited[record.uri] = ""
 
-		@maxSockets = 100
+		@maxSockets = 5
 		http.globalAgent.maxSockets = @maxSockets
 
 	restart: (@seed) ->
@@ -32,7 +35,7 @@ class Crawler
 
 		# Recreate the map of visited URLs
 		for r in @records
-			@visited[r.uri]=""
+			@markVisited(@visited, r)
 
 		# Queue all link from pages that we already visited
 		for r in @records
@@ -42,6 +45,7 @@ class Crawler
 
 		console.log("Queued URLs: " + @queued)
 		console.log("Records loaded: #{@records.length}")
+		console.log("Visited: #{Object.keys(@visited).length}")
 
 		if @counter==0
 			fs.writeFile("output.json", "[\n")
@@ -57,7 +61,7 @@ class Crawler
 		if @visited[url]==undefined and @queue.indexOf(url)<0
 			# console.log("Queued: " + url + " Encoded: " + encodeURI(url))
 			@queue.push(url)
-			console.log("Queued: " + url)
+			console.log("Queued: #{url} (Queue size: #{@queue.length})")
 			@queued++
 			@processQueue()
 			return
@@ -96,7 +100,7 @@ class Crawler
 					@records.push record
 					fs.appendFile("output.json", (if @counter++>0 then ",\n" else "") + JSON.stringify(record,null,1))	
 					# Mark as visited
-					@visited[record.uri]=""
+					@markVisited(@visited, record)
 					console.log("#{@counter}. Processed #{record.uri} (id=#{record.id}) (R/Q/Q=#{@running}/#{@queued}/#{@queue.length})")
 				@requestComplete()
 		req.on "error", (e) =>

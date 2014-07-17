@@ -14,16 +14,19 @@
       this.markVisited = markVisited;
       this.visited = {};
       this.counter = 0;
+      this.running = 0;
       this.queued = 0;
       this.queue = [];
       this.records = [];
       this.running = 0;
+      this.lastRequest = 0;
       if (this.markVisited === void 0) {
         this.markVisited = function(visited, record) {
           return visited[record.uri] = "";
         };
       }
       this.maxSockets = 5;
+      this.requestDelay = 1000;
       http.globalAgent.maxSockets = this.maxSockets;
     }
 
@@ -81,58 +84,66 @@
       }
     };
 
-    Crawler.running = 0;
-
     Crawler.prototype.request = function(url, callback, redirect) {
-      var req;
+      var doRequest;
       if (redirect === void 0) {
         this.running++;
         redirect = url;
       }
-      req = http.get(redirect, (function(_this) {
-        return function(res) {
-          var e, html;
-          if (res.statusCode >= 300 && res.statusCode < 307) {
-            _this.request(url, callback, res.headers["location"]);
-            res.on("data", function() {});
+      doRequest = (function(_this) {
+        return function() {
+          var now, req;
+          now = new Date().getTime();
+          if (now - _this.lastRequest < _this.requestDelay) {
+            setTimeout(doRequest, now - _this.lastRequest);
             return;
           }
-          if (res.statusCode !== 200) {
-            e = new Error("Server Error: " + res.statusCode + ", URL: " + url + ", Requested: " + redirect);
+          console.log("Request: " + now + " (" + (now - _this.lastRequest) + ")");
+          _this.lastRequest = now;
+          req = http.get(redirect, function(res) {
+            var e, html;
+            console.log("Resonse: " + res.statusCode + " (" + (new Date().getTime() - now) + " ms)");
+            if (res.statusCode >= 300 && res.statusCode < 307) {
+              _this.request(url, callback, res.headers["location"]);
+              res.on("data", function() {});
+              return;
+            }
+            if (res.statusCode !== 200) {
+              e = new Error("Server Error: " + res.statusCode + ", URL: " + url + ", Requested: " + redirect);
+              e.url = url;
+              callback(e);
+              res.on("data", function() {});
+              _this.requestComplete();
+              return;
+            }
+            html = "";
+            res.on("data", function(chunk) {
+              return html += chunk;
+            });
+            return res.on("end", function() {
+              var record;
+              if (res.data === void 0) {
+                res.data = html;
+              }
+              res.url = url;
+              record = callback(null, res, cheerio.load(html));
+              if (record !== null) {
+                _this.records.push(record);
+                fs.appendFile("output.json", (_this.counter++ > 0 ? ",\n" : "") + JSON.stringify(record, null, 1));
+                _this.markVisited(_this.visited, record);
+                console.log("" + _this.counter + ". Processed " + record.uri + " (id=" + record.id + ") (R/Q/Q=" + _this.running + "/" + _this.queued + "/" + _this.queue.length + ") (" + (new Date().getTime() - now) + " ms)");
+              }
+              return _this.requestComplete();
+            });
+          });
+          return req.on("error", function(e) {
             e.url = url;
             callback(e);
-            res.on("data", function() {});
-            _this.requestComplete();
-            return;
-          }
-          html = "";
-          res.on("data", function(chunk) {
-            return html += chunk;
-          });
-          return res.on("end", function() {
-            var record;
-            if (res.data === void 0) {
-              res.data = html;
-            }
-            res.url = url;
-            record = callback(null, res, cheerio.load(html));
-            if (record !== null) {
-              _this.records.push(record);
-              fs.appendFile("output.json", (_this.counter++ > 0 ? ",\n" : "") + JSON.stringify(record, null, 1));
-              _this.markVisited(_this.visited, record);
-              console.log("" + _this.counter + ". Processed " + record.uri + " (id=" + record.id + ") (R/Q/Q=" + _this.running + "/" + _this.queued + "/" + _this.queue.length + ")");
-            }
             return _this.requestComplete();
           });
         };
-      })(this));
-      return req.on("error", (function(_this) {
-        return function(e) {
-          e.url = url;
-          callback(e);
-          return _this.requestComplete();
-        };
-      })(this));
+      })(this);
+      return doRequest();
     };
 
     Crawler.prototype.requestComplete = function() {
@@ -149,7 +160,7 @@
         this.finish();
         return;
       }
-      if (this.running === 0) {
+      if (this.running < this.maxSockets) {
         toProcess = this.queue.splice(0, this.maxSockets);
         for (_i = 0, _len = toProcess.length; _i < _len; _i++) {
           q = toProcess[_i];

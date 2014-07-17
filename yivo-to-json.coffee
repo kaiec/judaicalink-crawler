@@ -6,7 +6,7 @@ processYivoPage = (error,result,$) ->
 	try
 
 		if (error!=null)
-			console.log("#{new Date()}: #{JSON.stringify(error)}")
+			console.log("#{new Date()}: #{error.message}")
 			return null
 
 		# Identifiers (in this case URI and numerical ID)

@@ -1,6 +1,7 @@
 http = require('http')
 cheerio = require('cheerio')
 fs = require('fs');
+path = require('path');
 
 
 class Crawler
@@ -14,6 +15,8 @@ class Crawler
 		@records = []
 		@running = 0
 		@lastRequest = 0
+		@githash = githash()
+		@prepareURL = (url) -> url
 		if (@markVisited==undefined)
 			@markVisited = (visited, record) ->
 				visited[record.uri] = ""
@@ -61,6 +64,7 @@ class Crawler
 
 	# Helper function that only queues a URL if we haven't visited it yet.
 	checkForQueue: (url) ->
+		url = @prepareURL (url)
 		if @visited[url]==undefined and @queue.indexOf(url)<0
 			# console.log("Queued: " + url + " Encoded: " + encodeURI(url))
 			@queue.push(url)
@@ -90,6 +94,7 @@ class Crawler
 				if res.statusCode!=200
 					e = new Error("Server Error: #{res.statusCode}, URL: #{url}, Requested: #{redirect}")
 					e.url = url
+					res.redirect = redirect
 					callback(e)
 					res.on "data", ->
 					@requestComplete()
@@ -104,8 +109,11 @@ class Crawler
 					res.data = html if (res.data==undefined)
 					# console.log "Preparing response: url=#{url}, res.url=#{res.url}" 
 					res.url = url
+					res.redirect = redirect
 					record = callback(null, res, cheerio.load(html))
 					if record!=null
+						record.created = new Date().toISOString()
+						record.githash = @githash
 						@records.push record
 						fs.appendFile("output.json", (if @counter++>0 then ",\n" else "") + JSON.stringify(record,null,1))	
 						# Mark as visited
@@ -142,6 +150,15 @@ class Crawler
 		fs.appendFile("output.json", "]\n")
 		console.log("Finished: " + new Date())
 
+
+
+gitdir = ->
+	path.join(require("parentpath").sync(".git"),".git")
+
+gitref = ->
+	fs.readFileSync(path.join(gitdir(),"HEAD"), "utf8").replace("ref: ", "").trim()
+
+githash = -> fs.readFileSync(path.join(gitdir(),gitref()), "utf8").trim()
 
 
 module.exports = Crawler

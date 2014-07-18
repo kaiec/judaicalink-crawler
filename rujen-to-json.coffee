@@ -1,12 +1,11 @@
-fs = require('fs');
 Crawler = require("./crawler")
+fs = require('fs');
 
 
 lowerCase = (url) ->
 	encodeURI(decodeURI(url).toLowerCase())
 
 processRujenPage = (error,result,$) ->
-	# $ is a jQuery instance scoped to the server-side DOM of the page
 	# console.log "Processing #{result.url}"
 	record = {}
 	try
@@ -21,8 +20,7 @@ processRujenPage = (error,result,$) ->
 			console.log("Processing Index Page: " + result.url)
 			$("td a").each (index,a) ->
 				page = "http://rujen.ru#{$(a).attr("href")}"
-				page = lowerCase(page)
-				crawler.checkForQueue lowerCase page
+				crawler.checkForQueue page
 			$("#bodyContent p a").last().each (index,a) ->
 				console.log("Next index page: " + "http://rujen.ru#{$(a).attr("href")}")
 				crawler.checkForQueue "http://rujen.ru#{$(a).attr("href")}"
@@ -74,4 +72,5 @@ processRujenPage = (error,result,$) ->
 
 
 crawler = new Crawler(processRujenPage)
+crawler.prepareURL = lowerCase
 crawler.restart("http://rujen.ru/index.php/%D0%A1%D0%BB%D1%83%D0%B6%D0%B5%D0%B1%D0%BD%D0%B0%D1%8F:AllPages/%D0%90%D0%91%D0%90%D0%97%D0%9E%D0%92%D0%9A%D0%90")

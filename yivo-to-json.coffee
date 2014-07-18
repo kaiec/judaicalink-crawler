@@ -10,7 +10,7 @@ processYivoPage = (error,result,$) ->
 			return null
 
 		# Identifiers (in this case URI and numerical ID)
-		record.uri = result.url
+		record.uri = result.redirect
 		try
 			record.id = /id=([0-9]+)/g.exec($("#ctl00_placeHolderMain_linkEmailArticle").attr("href"))[1]
 		catch error
@@ -35,10 +35,10 @@ processYivoPage = (error,result,$) ->
 		record.links = []
 		$("#ctl00_placeHolderMain_panelArticleText a[href^='article.aspx/']").each (index,a) ->
 			link = {}
-			link.href = encodeURI "http://www.yivoencyclopedia.org/#{$(a).attr("href")}"
+			link.href = "http://www.yivoencyclopedia.org/#{$(a).attr("href")}"
 			link.text = $(a).text().trim()
 			record.links.push link if link.text.length>0 # Strangely, there are sometimes empty links
-			crawler.checkForQueue encodeURI link.href
+			crawler.checkForQueue link.href
 
 		# Glossary terms
 		record.glossary = []
@@ -56,10 +56,10 @@ processYivoPage = (error,result,$) ->
 			if index==0 and sr.href!=record.uri then isMain = false
 			if !isMain and index==0
 				record.parent = sr.href
-				crawler.checkForQueue encodeURI sr.href
+				crawler.checkForQueue sr.href
 			if isMain and index!=0
 				record.subrecords.push sr
-				crawler.checkForQueue encodeURI sr.href
+				crawler.checkForQueue sr.href
 
 		# Subconcepts, i.e., H2 headings on the same page (not really a concept, but maybe useful)
 		record.subconcepts = []
@@ -80,7 +80,7 @@ processYivoPage = (error,result,$) ->
 		if record.next!=undefined 
 			record.next = "http://www.yivoencyclopedia.org/#{record.next}"
 			# console.log("Next: #{record.next}")
-			crawler.checkForQueue encodeURI record.next
+			crawler.checkForQueue record.next
 
 		return record
 	catch error
@@ -92,5 +92,6 @@ markVisited = (visited, record) ->
 	visited
 
 crawler = new Crawler(processYivoPage)
+crawler.prepareURL = (url) -> if url.indexOf("%")>0 then url else encodeURI url
 crawler.restart("http://www.yivoencyclopedia.org/article.aspx/Abeles_Shimon")
 

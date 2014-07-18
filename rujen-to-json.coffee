@@ -2,8 +2,7 @@ Crawler = require("./crawler")
 fs = require('fs');
 
 
-lowerCase = (url) ->
-	encodeURI(decodeURI(url).toLowerCase())
+errorfile = "rujen-error.txt"
 
 processRujenPage = (error,result,$) ->
 	# console.log "Processing #{result.url}"
@@ -15,7 +14,7 @@ processRujenPage = (error,result,$) ->
 			return null
 
 		# check for index pages
-		if (result.url.indexOf("AllPages")!=-1)
+		if (result.url.toLowerCase().indexOf("allpages")!=-1)
 			# Links
 			console.log("Processing Index Page: " + result.url)
 			$("td a").each (index,a) ->
@@ -32,7 +31,7 @@ processRujenPage = (error,result,$) ->
 			record.id = /var wgArticleId = "?([0-9]+)"?;/g.exec($("head").html())[1]
 		catch error
 			console.log("Error getting ID (#{record.uri}): #{error.message}")
-			fs.appendFile("error.txt", "#{new Date()} Error getting ID (#{record.uri}): #{error.message}\n")
+			fs.appendFile(errorfile, "#{new Date()} Error getting ID (#{record.uri}): #{error.message}\n")
 			return null
 
 		
@@ -66,11 +65,14 @@ processRujenPage = (error,result,$) ->
 
 		return record
 	catch error
-		fs.appendFile("error.txt", "#{new Date()} Error (#{record.uri}): #{error.message}\n")
+		fs.appendFile(errorfile, "#{new Date()} Error (#{record.uri}): #{error.message}\n")
 		return null
 
 
+lowerCase = (url) ->
+	encodeURI(decodeURI(url).toLowerCase())
 
 crawler = new Crawler(processRujenPage)
 crawler.prepareURL = lowerCase
+crawler.outfile = "rujen.json"
 crawler.restart("http://rujen.ru/index.php/%D0%A1%D0%BB%D1%83%D0%B6%D0%B5%D0%B1%D0%BD%D0%B0%D1%8F:AllPages/%D0%90%D0%91%D0%90%D0%97%D0%9E%D0%92%D0%9A%D0%90")

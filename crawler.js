@@ -23,6 +23,8 @@
       this.running = 0;
       this.lastRequest = 0;
       this.githash = githash();
+      this.outfile = "output.json";
+      this.errorfile = "error.txt";
       this.prepareURL = function(url) {
         return url;
       };
@@ -40,7 +42,7 @@
       var error, error2, l, output, r, _i, _j, _k, _len, _len1, _len2, _ref, _ref1, _ref2;
       this.seed = seed;
       try {
-        output = fs.readFileSync("output.json");
+        output = fs.readFileSync(this.outfile);
         this.records = JSON.parse(output);
       } catch (_error) {
         error = _error;
@@ -75,7 +77,7 @@
       console.log("Records loaded: " + this.records.length);
       console.log("Visited: " + (Object.keys(this.visited).length));
       if (this.counter === 0) {
-        fs.writeFile("output.json", "[\n");
+        fs.writeFile(this.outfile, "[\n");
       }
       this.checkForQueue(this.seed);
       return console.log(new Date());
@@ -140,7 +142,7 @@
                 record.created = new Date().toISOString();
                 record.githash = _this.githash;
                 _this.records.push(record);
-                fs.appendFile("output.json", (_this.counter++ > 0 ? ",\n" : "") + JSON.stringify(record, null, 1));
+                fs.appendFile(_this.outfile, (_this.counter++ > 0 ? ",\n" : "") + JSON.stringify(record, null, 1));
                 _this.markVisited(_this.visited, record);
                 console.log("" + _this.counter + ". Processed " + record.uri + " (id=" + record.id + ") (R/Q/Q=" + _this.running + "/" + _this.queued + "/" + _this.queue.length + ") (" + (new Date().getTime() - now) + " ms)");
               }
@@ -181,7 +183,7 @@
     };
 
     Crawler.prototype.finish = function() {
-      fs.appendFile("output.json", "]\n");
+      fs.appendFile(this.outfile, "]\n");
       return console.log("Finished: " + new Date());
     };
 

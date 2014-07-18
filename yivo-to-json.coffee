@@ -1,6 +1,8 @@
 Crawler = require("./crawler")
 fs = require('fs');
 
+errorfile = "yivo-error.txt"
+
 processYivoPage = (error,result,$) ->
 	record = {}
 	try
@@ -10,12 +12,12 @@ processYivoPage = (error,result,$) ->
 			return null
 
 		# Identifiers (in this case URI and numerical ID)
-		record.uri = result.redirect
+		record.uri = crawler.prepareURL result.redirect
 		try
 			record.id = /id=([0-9]+)/g.exec($("#ctl00_placeHolderMain_linkEmailArticle").attr("href"))[1]
 		catch error
 			console.log("Error (#{record.uri}): #{error.message}")
-			fs.appendFile("error.txt", "#{new Date()} Error (#{record.uri}): #{error.message}\n")
+			fs.appendFile(errorfile, "#{new Date()} Error (#{record.uri}): #{error.message}\n")
 			return null
 
 		# Basic stuff
@@ -35,7 +37,7 @@ processYivoPage = (error,result,$) ->
 		record.links = []
 		$("#ctl00_placeHolderMain_panelArticleText a[href^='article.aspx/']").each (index,a) ->
 			link = {}
-			link.href = "http://www.yivoencyclopedia.org/#{$(a).attr("href")}"
+			link.href = crawler.prepareURL "http://www.yivoencyclopedia.org/#{$(a).attr("href")}"
 			link.text = $(a).text().trim()
 			record.links.push link if link.text.length>0 # Strangely, there are sometimes empty links
 			crawler.checkForQueue link.href
@@ -51,7 +53,7 @@ processYivoPage = (error,result,$) ->
 		isMain =true
 		$("#ctl00_placeHolderMain_panelPager a").each (index,a) ->
 			sr = {}
-			sr.href = "http://www.yivoencyclopedia.org" + $(a).attr("href")
+			sr.href = crawler.prepareURL "http://www.yivoencyclopedia.org" + $(a).attr("href")
 			sr.page = $(a).text().trim()
 			if index==0 and sr.href!=record.uri then isMain = false
 			if !isMain and index==0
@@ -84,14 +86,19 @@ processYivoPage = (error,result,$) ->
 
 		return record
 	catch error
-		fs.appendFile("error.txt", "#{new Date()} Error (#{record.uri}): #{error.message}\n")
+		fs.appendFile(errorfile, "#{new Date()} Error (#{record.uri}): #{error.message}\n")
+		return null
 
-markVisited = (visited, record) ->
+
+
+crawler = new Crawler(processYivoPage)
+crawler.outfile = "yivo.json"
+crawler.markVisited = (visited, record) ->
 	visited[record.uri]="http://www.yivoencyclopedia.org/article.aspx?id=#{record.id}"
 	visited["http://www.yivoencyclopedia.org/article.aspx?id=#{record.id}"] = record.uri
 	visited
-
-crawler = new Crawler(processYivoPage)
-crawler.prepareURL = (url) -> if url.indexOf("%")>0 then url else encodeURI url
+crawler.prepareURL = (url) -> 
+	url = url.replace(":80", "")
+	if url.indexOf("%")>0 then url else encodeURI url
 crawler.restart("http://www.yivoencyclopedia.org/article.aspx/Abeles_Shimon")
 

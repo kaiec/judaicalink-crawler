@@ -16,6 +16,8 @@ class Crawler
 		@running = 0
 		@lastRequest = 0
 		@githash = githash()
+		@outfile = "output.json"
+		@errorfile = "error.txt"
 		@prepareURL = (url) -> url
 		if (@markVisited==undefined)
 			@markVisited = (visited, record) ->
@@ -28,7 +30,7 @@ class Crawler
 	restart: (@seed) ->
 		# Load previous results, if not yet finished
 		try
-			output = fs.readFileSync("output.json")
+			output = fs.readFileSync(@outfile)
 			@records = JSON.parse(output)
 		catch error
 			if error.code!="ENOENT" 
@@ -54,7 +56,7 @@ class Crawler
 		console.log("Visited: #{Object.keys(@visited).length}")
 
 		if @counter==0
-			fs.writeFile("output.json", "[\n")
+			fs.writeFile(@outfile, "[\n")
 
 		# Queue Index page anyway to get all pages
 		@checkForQueue @seed
@@ -115,7 +117,7 @@ class Crawler
 						record.created = new Date().toISOString()
 						record.githash = @githash
 						@records.push record
-						fs.appendFile("output.json", (if @counter++>0 then ",\n" else "") + JSON.stringify(record,null,1))	
+						fs.appendFile(@outfile, (if @counter++>0 then ",\n" else "") + JSON.stringify(record,null,1))	
 						# Mark as visited
 						@markVisited(@visited, record)
 						console.log("#{@counter}. Processed #{record.uri} (id=#{record.id}) (R/Q/Q=#{@running}/#{@queued}/#{@queue.length}) (#{new Date().getTime()-now} ms)")
@@ -147,7 +149,7 @@ class Crawler
 
 	# When finished, close the array in the output file
 	finish: ->
-		fs.appendFile("output.json", "]\n")
+		fs.appendFile(@outfile, "]\n")
 		console.log("Finished: " + new Date())
 
 

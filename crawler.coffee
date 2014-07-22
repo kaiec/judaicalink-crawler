@@ -12,6 +12,7 @@ class Crawler
 		@running = 0
 		@queued = 0
 		@queue = []
+		@working = []
 		@records = []
 		@running = 0
 		@lastRequest = 0
@@ -24,7 +25,7 @@ class Crawler
 				visited[record.uri] = ""
 
 		@maxSockets = 5
-		@requestDelay = 1000
+		@requestDelay = 300
 		http.globalAgent.maxSockets = @maxSockets
 
 	restart: (@seed) ->
@@ -65,21 +66,25 @@ class Crawler
 		console.log(new Date())
 
 	# Helper function that only queues a URL if we haven't visited it yet.
-	checkForQueue: (url) ->
+	checkForQueue: (url, priority=false) ->
 		url = @prepareURL (url)
-		if @visited[url]==undefined and @queue.indexOf(url)<0
+		if @visited[url]==undefined and @queue.indexOf(url)<0 and @working.indexOf(url)<0
 			# console.log("Queued: " + url + " Encoded: " + encodeURI(url))
-			@queue.push(url)
+			if priority then @queue.unshift(url) else @queue.push(url)
 			console.log("Queued: #{url} (Queue size: #{@queue.length})")
 			@queued++
 			@processQueue()
 			return
 
-	request: (url, callback, redirect) ->
+	request: (url, callback, redirect, trace) ->
 		# console.log "request #{url}, redirect: #{redirect}"
 		if redirect==undefined
 			@running++
 			redirect = url
+			trace = []
+			trace.push(url)
+		else
+			trace.push(redirect)
 		doRequest = () =>
 			now = new Date().getTime()
 			if (now-@lastRequest<@requestDelay)
@@ -90,47 +95,58 @@ class Crawler
 			req = http.get redirect, (res) =>
 				console.log "Resonse: #{res.statusCode} (#{new Date().getTime()-now} ms)"
 				if res.statusCode>=300 and res.statusCode < 307
-					@request(url, callback, res.headers["location"])
+					@request(url, callback, res.headers["location"], trace)
 					res.on "data", ->
 					return
 				if res.statusCode!=200
 					e = new Error("Server Error: #{res.statusCode}, URL: #{url}, Requested: #{redirect}")
 					e.url = url
 					res.redirect = redirect
+					res.trace = trace
+					console.log("Trace: " + trace.join("->"))
 					callback(e)
 					res.on "data", ->
-					@requestComplete()
+					@requestComplete(url)
 					return
 				html = ""
 				res.on "data", (chunk) =>
 					# console.log "Chunk"
 					html += chunk
 				res.on "end", =>
+					if (@visited[url]) != undefined # visited in the meantime
+						@requestComplete(url)
+						return
 					# console.log "No more data"
 					# console.log "Preparing response: html=#{html}, res.data=#{res.data}" 
 					res.data = html if (res.data==undefined)
 					# console.log "Preparing response: url=#{url}, res.url=#{res.url}" 
 					res.url = url
 					res.redirect = redirect
+					res.trace = trace
+					console.log("Trace: " + trace.join("->"))
 					record = callback(null, res, cheerio.load(html))
 					if record!=null
+						record.trace = trace.join("->")
 						record.created = new Date().toISOString()
 						record.githash = @githash
 						@records.push record
 						fs.appendFile(@outfile, (if @counter++>0 then ",\n" else "") + JSON.stringify(record,null,1))	
 						# Mark as visited
+						trace.forEach((u)=>@visited[u]="")
 						@markVisited(@visited, record)
 						console.log("#{@counter}. Processed #{record.uri} (id=#{record.id}) (R/Q/Q=#{@running}/#{@queued}/#{@queue.length}) (#{new Date().getTime()-now} ms)")
-					@requestComplete()
+					@requestComplete(url)
 			req.on "error", (e) =>
 				e.url = url
 				callback(e)
-				@requestComplete()
+				@requestComplete(url)
 		doRequest()
 
-	requestComplete: ->
+	requestComplete: (url) ->
 		@running--
 		@queued--
+		index = @working.indexOf(url)
+		@working.splice(index, 1) if (index > -1) 
 		if (@running==0) then @processQueue()
 
 	processQueue: ->
@@ -141,6 +157,7 @@ class Crawler
 
 		if (@running<@maxSockets)
 			toProcess = @queue.splice(0,@maxSockets)
+			@working = @working.concat(toProcess)
 			for q in toProcess
 				@request(q,@processPage)
 			# console.log("New crawling started with queue size #{toProcess.length} (Queue: #{queue.length})")

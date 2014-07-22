@@ -19,10 +19,10 @@ processRujenPage = (error,result,$) ->
 			console.log("Processing Index Page: " + result.url)
 			$("td a").each (index,a) ->
 				page = "http://rujen.ru#{$(a).attr("href")}"
-				crawler.checkForQueue page
+				crawler.checkForQueue lowerCase page
 			$("#bodyContent p a").last().each (index,a) ->
 				console.log("Next index page: " + "http://rujen.ru#{$(a).attr("href")}")
-				crawler.checkForQueue "http://rujen.ru#{$(a).attr("href")}"
+				crawler.checkForQueue lowerCase "http://rujen.ru#{$(a).attr("href")}", true
 			return null
 
 		# Identifiers (in this case URI and numerical ID)

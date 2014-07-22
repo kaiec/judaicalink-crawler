@@ -94,6 +94,7 @@ processYivoPage = (error,result,$) ->
 crawler = new Crawler(processYivoPage)
 crawler.outfile = "yivo.json"
 crawler.markVisited = (visited, record) ->
+	console.log("Yivo visited...")
 	visited[record.uri]="http://www.yivoencyclopedia.org/article.aspx?id=#{record.id}"
 	visited["http://www.yivoencyclopedia.org/article.aspx?id=#{record.id}"] = record.uri
 	visited

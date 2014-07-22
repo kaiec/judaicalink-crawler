@@ -19,6 +19,7 @@
       this.running = 0;
       this.queued = 0;
       this.queue = [];
+      this.working = [];
       this.records = [];
       this.running = 0;
       this.lastRequest = 0;
@@ -34,7 +35,7 @@
         };
       }
       this.maxSockets = 5;
-      this.requestDelay = 1000;
+      this.requestDelay = 300;
       http.globalAgent.maxSockets = this.maxSockets;
     }
 
@@ -83,21 +84,32 @@
       return console.log(new Date());
     };
 
-    Crawler.prototype.checkForQueue = function(url) {
+    Crawler.prototype.checkForQueue = function(url, priority) {
+      if (priority == null) {
+        priority = false;
+      }
       url = this.prepareURL(url);
-      if (this.visited[url] === void 0 && this.queue.indexOf(url) < 0) {
-        this.queue.push(url);
+      if (this.visited[url] === void 0 && this.queue.indexOf(url) < 0 && this.working.indexOf(url) < 0) {
+        if (priority) {
+          this.queue.unshift(url);
+        } else {
+          this.queue.push(url);
+        }
         console.log("Queued: " + url + " (Queue size: " + this.queue.length + ")");
         this.queued++;
         this.processQueue();
       }
     };
 
-    Crawler.prototype.request = function(url, callback, redirect) {
+    Crawler.prototype.request = function(url, callback, redirect, trace) {
       var doRequest;
       if (redirect === void 0) {
         this.running++;
         redirect = url;
+        trace = [];
+        trace.push(url);
+      } else {
+        trace.push(redirect);
       }
       doRequest = (function(_this) {
         return function() {
@@ -113,7 +125,7 @@
             var e, html;
             console.log("Resonse: " + res.statusCode + " (" + (new Date().getTime() - now) + " ms)");
             if (res.statusCode >= 300 && res.statusCode < 307) {
-              _this.request(url, callback, res.headers["location"]);
+              _this.request(url, callback, res.headers["location"], trace);
               res.on("data", function() {});
               return;
             }
@@ -121,9 +133,11 @@
               e = new Error("Server Error: " + res.statusCode + ", URL: " + url + ", Requested: " + redirect);
               e.url = url;
               res.redirect = redirect;
+              res.trace = trace;
+              console.log("Trace: " + trace.join("->"));
               callback(e);
               res.on("data", function() {});
-              _this.requestComplete();
+              _this.requestComplete(url);
               return;
             }
             html = "";
@@ -132,36 +146,51 @@
             });
             return res.on("end", function() {
               var record;
+              if (_this.visited[url] !== void 0) {
+                _this.requestComplete(url);
+                return;
+              }
               if (res.data === void 0) {
                 res.data = html;
               }
               res.url = url;
               res.redirect = redirect;
+              res.trace = trace;
+              console.log("Trace: " + trace.join("->"));
               record = callback(null, res, cheerio.load(html));
               if (record !== null) {
+                record.trace = trace.join("->");
                 record.created = new Date().toISOString();
                 record.githash = _this.githash;
                 _this.records.push(record);
                 fs.appendFile(_this.outfile, (_this.counter++ > 0 ? ",\n" : "") + JSON.stringify(record, null, 1));
+                trace.forEach(function(u) {
+                  return _this.visited[u] = "";
+                });
                 _this.markVisited(_this.visited, record);
                 console.log("" + _this.counter + ". Processed " + record.uri + " (id=" + record.id + ") (R/Q/Q=" + _this.running + "/" + _this.queued + "/" + _this.queue.length + ") (" + (new Date().getTime() - now) + " ms)");
               }
-              return _this.requestComplete();
+              return _this.requestComplete(url);
             });
           });
           return req.on("error", function(e) {
             e.url = url;
             callback(e);
-            return _this.requestComplete();
+            return _this.requestComplete(url);
           });
         };
       })(this);
       return doRequest();
     };
 
-    Crawler.prototype.requestComplete = function() {
+    Crawler.prototype.requestComplete = function(url) {
+      var index;
       this.running--;
       this.queued--;
+      index = this.working.indexOf(url);
+      if (index > -1) {
+        this.working.splice(index, 1);
+      }
       if (this.running === 0) {
         return this.processQueue();
       }
@@ -175,6 +204,7 @@
       }
       if (this.running < this.maxSockets) {
         toProcess = this.queue.splice(0, this.maxSockets);
+        this.working = this.working.concat(toProcess);
         for (_i = 0, _len = toProcess.length; _i < _len; _i++) {
           q = toProcess[_i];
           this.request(q, this.processPage);

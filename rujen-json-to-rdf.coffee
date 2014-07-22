@@ -96,8 +96,28 @@ for record in records
 	for l in record.links ? []
 		addTriple(uri, "skos:related", local(l.href))
 		if l.text.length>0 then addTriple(local(l.href), "skos:altLabel", literal(l.text))
-	addTriple(uri, "jl:hasAbstract", literal(record.abstract, "ru"))
+	for cat in record.categories ? []
+		if cat=="Персоналии"
+			addTriple(uri, "jl:hasCategory", "http://data.judaicalink.org/data/rujen/person")
+		else if cat=="География"
+			addTriple(uri, "jl:hasCategory", "http://data.judaicalink.org/data/rujen/geography")
+		else
+			console.log("Unknown category: " + cat)
+	if record.abstract
+		addTriple(uri, "jl:hasAbstract", literal(record.abstract, "ru"))
+	else if record.empty
+		addTriple(uri, "skos:scopeNote", literal("The article describing this concept does not (yet) exist in the encyclopedia.", "en"))
 	addTriple(provURI(uri), "dcterms:created", literal(record.created, expand("xsd:dateTime")))
 	addTriple(provURI(uri), "jl:crawlerRevision", literal(record.githash))
 	addTriple(provURI(uri), "jl:rdfWriterRevision", literal(rdfWriterRevision))
+
+
+addTriple("http://data.judaicalink.org/data/rujen/person", a, "skos:Concept")
+addTriple("http://data.judaicalink.org/data/rujen/person", "jl:describedAt", "http://www.rujen.ru/index.php/%D0%9A%D0%B0%D1%82%D0%B5%D0%B3%D0%BE%D1%80%D0%B8%D1%8F:%D0%9F%D0%B5%D1%80%D1%81%D0%BE%D0%BD%D0%B0%D0%BB%D0%B8%D0%B8")
+addTriple("http://data.judaicalink.org/data/rujen/person", "skos:prefLabel", literal("Person", "en"))
+
+addTriple("http://data.judaicalink.org/data/rujen/geography", a, "skos:Concept")
+addTriple("http://data.judaicalink.org/data/rujen/geography", "jl:describedAt", "http://www.rujen.ru/index.php/%D0%9A%D0%B0%D1%82%D0%B5%D0%B3%D0%BE%D1%80%D0%B8%D1%8F:%D0%93%D0%B5%D0%BE%D0%B3%D1%80%D0%B0%D1%84%D0%B8%D1%8F")
+addTriple("http://data.judaicalink.org/data/rujen/geography", "skos:prefLabel", literal("Geography", "en"))
+
 writer.end (error, result) -> fs.writeFile("rujen.n3", result)

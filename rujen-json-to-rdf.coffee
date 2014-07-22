@@ -5,7 +5,7 @@ path = require('path');
 
 records = []
 try
-	output = fs.readFileSync("yivo.json")
+	output = fs.readFileSync("rujen.json")
 	records = JSON.parse(output)
 catch error
 	console.log error.message
@@ -56,14 +56,7 @@ prefixes = {
 }
 
 local = (uri) ->
-	return uri.replace("http://www.yivoencyclopedia.org/article.aspx/", "http://data.judaicalink.org/data/yivo/").
-	replace(/%C5%82/g, "l").replace(/%C5%81/g, "L").
-	replace(/%C5%BB/g, "Z").replace(/%C5%BA/g, "z").
-	replace(/%E1%B8%A5/g, "h").replace(/%E1%B8%A4/g, "H").
-	replace(/%E2%80%98/g, "").replace(/%E2%80%93/g,"-").
-	replace(/%E2%80%99/g, "_").replace(/%C2%A0/g,"_").
-	replace(/%E2%80%9C/g, "").replace(/%E2%80%9D/g,"").
-	replace(/%C3%B3/g, "o")
+	return getLatinString(decodeURI(uri.replace("http://rujen.ru/index.php/", "http://data.judaicalink.org/data/rujen/")))
 
 provURI = (uri) ->
 	return uri.replace("http://data.judaicalink.org/data/", "http://data.judaicalink.org/data/rdf/")
@@ -76,6 +69,22 @@ gitref = ->
 
 githash = -> fs.readFileSync(path.join(gitdir(),gitref()), "utf8").trim()
 
+latinUTF8Substitution = ["a", "b", "v", "g", "d", "e", "zh", "z", "i",
+"y", "k", "l", "m", "n", "o", "p", "r", "s", "t", "u", "f", "kh", "ts",
+"ch", "sh", "shch", "j", "y", "j", "e", "yu", "ya", "e", "e"]
+UTF8TableBeginning = 1072;
+
+getLatinString = (cyrillicString) ->
+	result = "";
+	input = cyrillicString.toLowerCase().split('')
+	for i in [0...input.length]
+		charCodeDec = input[i].charCodeAt(0)-UTF8TableBeginning
+		if (charCodeDec>=0 && charCodeDec<34)
+			result += latinUTF8Substitution[charCodeDec]
+		else
+			result += input[i]
+	return result
+
 rdfWriterRevision = githash()
 
 writer = N3.Writer(prefixes)
@@ -84,21 +93,11 @@ for record in records
 	addTriple(uri, a, "skos:Concept")
 	addTriple(uri, "jl:describedAt", record.uri)
 	addTriple(uri, "skos:prefLabel", literal(record.title))
-	for l in record.links 	
+	for l in record.links ? []
 		addTriple(uri, "skos:related", local(l.href))
 		if l.text.length>0 then addTriple(local(l.href), "skos:altLabel", literal(l.text))
-	addTriple(uri, "jl:hasAbstract", literal(record.abstract, "en"))
-	for sc in record.subconcepts
-		scu = local uri + "/" + encodeURI(sc.replace(/[ ]+/g, "_"))
-		addTriple(scu, a, "skos:Concept")
-		addTriple(scu, "skos:broader", uri)
-		addTriple(scu, "skos:prefLabel", literal(sc))
-		addTriple(uri, "skos:narrower", scu)
-	for sr in record.subrecords
-		addTriple(uri, "skos:narrower", local(sr.href))
-	if record.broader!=undefined
-		addTriple(uri, "skos:broader", local record.broader)
+	addTriple(uri, "jl:hasAbstract", literal(record.abstract, "ru"))
 	addTriple(provURI(uri), "dcterms:created", literal(record.created, expand("xsd:dateTime")))
 	addTriple(provURI(uri), "jl:crawlerRevision", literal(record.githash))
 	addTriple(provURI(uri), "jl:rdfWriterRevision", literal(rdfWriterRevision))
-writer.end (error, result) -> fs.writeFile("yivo.n3", result)
+writer.end (error, result) -> fs.writeFile("rujen.n3", result)

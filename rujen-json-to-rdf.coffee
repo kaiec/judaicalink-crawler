@@ -93,6 +93,8 @@ for record in records
 	addTriple(uri, a, "skos:Concept")
 	addTriple(uri, "jl:describedAt", record.uri)
 	addTriple(uri, "skos:prefLabel", literal(record.title))
+	identifier = decodeURI(record.uri.replace("http://rujen.ru/index.php/", ""))
+	addTriple(uri, "dcterms:identifier", literal(identifier))
 	for l in record.links ? []
 		addTriple(uri, "skos:related", local(l.href))
 		if l.text.length>0 then addTriple(local(l.href), "skos:altLabel", literal(l.text))
@@ -105,6 +107,20 @@ for record in records
 			console.log("Unknown category: " + cat)
 	if record.abstract
 		addTriple(uri, "jl:hasAbstract", literal(record.abstract, "ru"))
+		referTo = /^([\S]+), см\. ([\S]+)\.$/.exec(record.abstract)
+		if (referTo)
+			source = referTo[1]
+			target = referTo[2]
+			targetCheck = false
+			for link in record.links ? []
+				if link.href.indexOf("/#{encodeURI(target.toLowerCase())}")>0
+					targetCheck = link.href
+			sourceCheck = identifier==source.toLowerCase()
+			if !sourceCheck || !targetCheck
+				console.log("#{source} -> #{target} (#{identifier}<>#{source.toLowerCase()}) (#{targetCheck})") 
+			else
+				addTriple(uri, "jl:referTo", local(targetCheck))
+
 	else if record.empty
 		addTriple(uri, "skos:scopeNote", literal("The article describing this concept does not (yet) exist in the encyclopedia.", "en"))
 	addTriple(provURI(uri), "dcterms:created", literal(record.created, expand("xsd:dateTime")))

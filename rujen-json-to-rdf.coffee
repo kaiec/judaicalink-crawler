@@ -123,6 +123,8 @@ for record in records
 
 	else if record.empty
 		addTriple(uri, "skos:scopeNote", literal("The article describing this concept does not (yet) exist in the encyclopedia.", "en"))
+	addTriple(provURI(uri), a, "foaf:Page")
+	addTriple(provURI(uri), "rdfs:label", literal("Metadata for <#{uri}>."))
 	addTriple(provURI(uri), "dcterms:created", literal(record.created, expand("xsd:dateTime")))
 	addTriple(provURI(uri), "jl:crawlerRevision", literal(record.githash))
 	addTriple(provURI(uri), "jl:rdfWriterRevision", literal(rdfWriterRevision))

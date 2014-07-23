@@ -98,6 +98,8 @@ for record in records
 		addTriple(uri, "skos:narrower", local(sr.href))
 	if record.broader!=undefined
 		addTriple(uri, "skos:broader", local record.broader)
+	addTriple(provURI(uri), a, "foaf:Page")
+	addTriple(provURI(uri), "rdfs:label", literal("Metadata for <#{uri}>."))
 	addTriple(provURI(uri), "dcterms:created", literal(record.created, expand("xsd:dateTime")))
 	addTriple(provURI(uri), "jl:crawlerRevision", literal(record.githash))
 	addTriple(provURI(uri), "jl:rdfWriterRevision", literal(rdfWriterRevision))

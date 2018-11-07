@@ -2,3 +2,4 @@ node_modules/
 *.n3
 *.json
 error.txt
+log.txt

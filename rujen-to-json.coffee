@@ -1,10 +1,12 @@
-Crawler = require("./crawler")
 fs = require('fs');
+Crawler = require("./crawler")
 
 
-errorfile = "rujen-error.txt"
+lowerCase = (url) ->
+	encodeURI(decodeURI(url).toLowerCase())
 
 processRujenPage = (error,result,$) ->
+	# $ is a jQuery instance scoped to the server-side DOM of the page
 	# console.log "Processing #{result.url}"
 	record = {}
 	try
@@ -14,15 +16,16 @@ processRujenPage = (error,result,$) ->
 			return null
 
 		# check for index pages
-		if (result.url.toLowerCase().indexOf("allpages")!=-1)
+		if (result.url.indexOf("AllPages")!=-1)
 			# Links
 			console.log("Processing Index Page: " + result.url)
 			$("td a").each (index,a) ->
 				page = "http://rujen.ru#{$(a).attr("href")}"
+				page = lowerCase(page)
 				crawler.checkForQueue lowerCase page
 			$("#bodyContent p a").last().each (index,a) ->
 				console.log("Next index page: " + "http://rujen.ru#{$(a).attr("href")}")
-				crawler.checkForQueue lowerCase "http://rujen.ru#{$(a).attr("href")}", true
+				crawler.checkForQueue "http://rujen.ru#{$(a).attr("href")}"
 			return null
 
 		# Identifiers (in this case URI and numerical ID)
@@ -31,7 +34,7 @@ processRujenPage = (error,result,$) ->
 			record.id = /var wgArticleId = "?([0-9]+)"?;/g.exec($("head").html())[1]
 		catch error
 			console.log("Error getting ID (#{record.uri}): #{error.message}")
-			fs.appendFile(errorfile, "#{new Date()} Error getting ID (#{record.uri}): #{error.message}\n")
+			fs.appendFile("error.txt", "#{new Date()} Error getting ID (#{record.uri}): #{error.message}\n")
 			return null
 
 		
@@ -65,14 +68,10 @@ processRujenPage = (error,result,$) ->
 
 		return record
 	catch error
-		fs.appendFile(errorfile, "#{new Date()} Error (#{record.uri}): #{error.message}\n")
+		fs.appendFile("error.txt", "#{new Date()} Error (#{record.uri}): #{error.message}\n")
 		return null
 
 
-lowerCase = (url) ->
-	encodeURI(decodeURI(url).toLowerCase())
 
 crawler = new Crawler(processRujenPage)
-crawler.prepareURL = lowerCase
-crawler.outfile = "rujen.json"
 crawler.restart("http://rujen.ru/index.php/%D0%A1%D0%BB%D1%83%D0%B6%D0%B5%D0%B1%D0%BD%D0%B0%D1%8F:AllPages/%D0%90%D0%91%D0%90%D0%97%D0%9E%D0%92%D0%9A%D0%90")

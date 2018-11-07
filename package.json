@@ -13,9 +13,11 @@
   "dependencies": {
     "cheerio": "*",
     "n3": "*",
-    "parentpath": "^0.2.0"
+    "csv": "*",
+    "commander": "*"
   },
-  "devDependencies": {},
+  "devDependencies": {
+  },
   "preferGlobal": false,
   "private": true,
   "license": "MIT"

@@ -4,7 +4,7 @@ fs = require('fs')
 
 records = []
 try
-	output = fs.readFileSync("output.json")
+	output = fs.readFileSync("djh.json")
 	records = JSON.parse(output)
 catch error
 	console.log error.message
@@ -55,26 +55,23 @@ prefixes = {
 }
 
 local = (uri) ->
-	return uri.replace("http://www.yivoencyclopedia.org/article.aspx/", "http://data.judaicalink.org/data/yivo/")
+	return uri.replace("http://dasjuedischehamburg.de/inhalt/", "http://data.judaicalink.org/data/djh/")
 
 writer = N3.Writer(prefixes)
 for record in records
 	uri = local(record.uri)
 	addTriple(uri, a, "skos:Concept")
+	if (record.isPerson) 
+		addTriple(uri, a, "foaf:Person")
+		addTriple(uri, "jl:occupation", literal(record.occupation, "de")) if record.occupation
+		addTriple(uri, "jl:birthDate", literal(record.birthDate, "de")) if record.birthDate
+		addTriple(uri, "jl:birthLocation", literal(record.birthLocation, "de")) if record.birthLocation
+		addTriple(uri, "jl:deathDate", literal(record.deathDate, "de")) if record.deathDate
+		addTriple(uri, "jl:deathLocation", literal(record.deathLocation, "de")) if record.deathLocation
 	addTriple(uri, "jl:describedAt", record.uri)
 	addTriple(uri, "skos:prefLabel", literal(record.title))
 	for l in record.links 	
 		addTriple(uri, "skos:related", local(l.href))
 		if l.text.length>0 then addTriple(local(l.href), "skos:altLabel", literal(l.text))
-	addTriple(uri, "jl:hasAbstract", literal(record.abstract, "en"))
-	for sc in record.subconcepts
-		scu = uri + "/" + encodeURI(sc.replace(/[ ]+/g, "_"))
-		addTriple(scu, a, "skos:Concept")
-		addTriple(scu, "skos:broader", uri)
-		addTriple(scu, "skos:prefLabel", literal(sc))
-		addTriple(uri, "skos:narrower", scu)
-	for sr in record.subrecords
-		addTriple(uri, "skos:narrower", local(sr.href))
-	if record.broader!=undefined
-		addTriple(uri, "skos:broader", local record.broader)
-writer.end (error, result) -> fs.writeFile("output.n3", result)
+	addTriple(uri, "jl:hasAbstract", literal(record.abstract, "de"))
+writer.end (error, result) -> fs.writeFile("djh.n3", result)
